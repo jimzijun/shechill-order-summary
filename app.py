@@ -250,17 +250,15 @@ st.set_page_config(page_title="Square Pickup Orders", layout="wide")
 st.title("Square Pickup Orders Viewer")
 
 if "day_view" not in st.session_state:
-    st.session_state["day_view"] = "Today"
+    st.session_state["day_view"] = "Tomorrow"
 
-with st.sidebar:
-    st.header("Select day")
-    col_today, col_tomorrow = st.columns(2)
-    if col_today.button("Today", use_container_width=True):
+col_nav_today, col_nav_tomorrow = st.columns([1, 1])
+with col_nav_today:
+    if st.button("Today", use_container_width=True):
         st.session_state["day_view"] = "Today"
-    if col_tomorrow.button("Tomorrow", use_container_width=True):
+with col_nav_tomorrow:
+    if st.button("Tomorrow", use_container_width=True):
         st.session_state["day_view"] = "Tomorrow"
-    st.caption("Uses env vars SQUARE_ACCESS_TOKEN and SQUARE_LOCATION_ID.")
-
 selected_day = st.session_state["day_view"]
 
 access_token = ACCESS_TOKEN
