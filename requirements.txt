@@ -1,0 +1,4 @@
+squareup < 42.0.0
+pandas
+dotenv
+streamlit
