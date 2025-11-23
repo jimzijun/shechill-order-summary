@@ -252,14 +252,28 @@ st.title("Square Pickup Orders Viewer")
 if "day_view" not in st.session_state:
     st.session_state["day_view"] = "Tomorrow"
 
-col_nav_today, col_nav_tomorrow = st.columns([1, 1])
-with col_nav_today:
-    if st.button("Today", use_container_width=True):
-        st.session_state["day_view"] = "Today"
-with col_nav_tomorrow:
-    if st.button("Tomorrow", use_container_width=True):
-        st.session_state["day_view"] = "Tomorrow"
-selected_day = st.session_state["day_view"]
+day_options = ["Today", "Tomorrow"]
+with st.container():
+    st.markdown('<div class="fullwidth-toggle">', unsafe_allow_html=True)
+    if hasattr(st, "segmented_control"):
+        selected_day = st.segmented_control(
+            "Pickups to view",
+            day_options,
+            default=st.session_state["day_view"],
+            selection_mode="single",
+            key="day_view_toggle",
+        )
+    else:
+        selected_day = st.radio(
+            "Pickups to view",
+            day_options,
+            horizontal=True,
+            index=day_options.index(st.session_state["day_view"]),
+            key="day_view_toggle",
+        )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+st.session_state["day_view"] = selected_day
 
 access_token = ACCESS_TOKEN
 location_id = DEFAULT_LOCATION_ID
