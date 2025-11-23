@@ -245,38 +245,32 @@ def dataframe_full_height(df: pd.DataFrame, row_px: int = 35, header_px: int = 3
 
 
 # ----- Streamlit app -----
-st.set_page_config(page_title="Square Pickup Orders – Today & Tomorrow", layout="wide")
+st.set_page_config(page_title="Square Pickup Orders", layout="wide")
 
-st.title("Square Pickup Orders – Today & Tomorrow")
+st.title("Square Pickup Orders Viewer")
+
+if "day_view" not in st.session_state:
+    st.session_state["day_view"] = "Today"
 
 with st.sidebar:
-    st.header("Square Settings")
+    st.header("Select day")
+    col_today, col_tomorrow = st.columns(2)
+    if col_today.button("Today", use_container_width=True):
+        st.session_state["day_view"] = "Today"
+    if col_tomorrow.button("Tomorrow", use_container_width=True):
+        st.session_state["day_view"] = "Tomorrow"
+    st.caption("Uses env vars SQUARE_ACCESS_TOKEN and SQUARE_LOCATION_ID.")
 
-    token_ok = bool(ACCESS_TOKEN)
-    if not token_ok:
-        st.error("SQUARE_ACCESS_TOKEN env var is not set.")
-    st.write("Environment variables used (only production environment is supported):")
+selected_day = st.session_state["day_view"]
 
-    access_token = st.text_input(
-        "Access token",
-        value=ACCESS_TOKEN,
-        type="password",
-        help="SQUARE_ACCESS_TOKEN",
-    )
-
-    location_id = st.text_input(
-        "Location ID",
-        value=DEFAULT_LOCATION_ID,
-        help="SQUARE_LOCATION_ID (from your Square dashboard)",
-    )
-
-    st.caption("Data is cached briefly to avoid hitting Square on every refresh.")
-
+access_token = ACCESS_TOKEN
+location_id = DEFAULT_LOCATION_ID
 
 if not access_token:
+    st.error("SQUARE_ACCESS_TOKEN env var is not set.")
     st.stop()
 if not location_id:
-    st.error("Please provide a Square location ID.")
+    st.error("Please provide a Square location ID (SQUARE_LOCATION_ID).")
     st.stop()
 
 
@@ -302,51 +296,28 @@ tomorrow_df = orders_to_lineitem_df(tomorrow_orders)
 today_prod = kitchen_production_table(today_df)
 tomorrow_prod = kitchen_production_table(tomorrow_df)
 
-orders_tab, = st.tabs(["Orders"])
+selected_date = local_today() if selected_day == "Today" else local_today() + timedelta(days=1)
+selected_df = today_df if selected_day == "Today" else tomorrow_df
+selected_prod = today_prod if selected_day == "Today" else tomorrow_prod
 
-with orders_tab:
-    sub_tabs = st.tabs(["Today", "Tomorrow"])
+st.subheader(f"**Customer Order - {selected_date.isoformat()}**")
+st.caption(f"One row per line item in each pickup order for {selected_day.lower()}.")
+st.data_editor(
+    selected_df.reset_index(drop=True),
+    height=dataframe_full_height(selected_df),
+    hide_index=True,
+    disabled=True,
+)
 
-    # --- Today ---
-    with sub_tabs[0]:
-        st.subheader(f"**Customer Order - {local_today().isoformat()}**")
-        st.caption("One row per line item in each pickup order.")
-        st.data_editor(
-            today_df.reset_index(drop=True),
-            height=dataframe_full_height(today_df),
-            hide_index=True,
-            disabled=True,
-        )
+st.subheader(f"**Kitchen production - {selected_date.isoformat()}**")
+st.caption(f"Total quantity per item for {selected_day.lower()}.")
+st.data_editor(
+    selected_prod.reset_index(drop=True),
+    height=dataframe_full_height(selected_prod),
+    hide_index=True,
+    disabled=True,
+)
 
-        st.subheader(f"**Kitchen production - {local_today().isoformat()}**")
-        st.caption("Total quantity per item for today.")
-        st.data_editor(
-            today_prod.reset_index(drop=True),
-            height=dataframe_full_height(today_prod),
-            hide_index=True,
-            disabled=True,
-        )
-
-    # --- Tomorrow ---
-    with sub_tabs[1]:
-        st.subheader(f"**Customer Order - {(local_today() + timedelta(days=1)).isoformat()}**")
-        st.caption("One row per line item in each pickup order.")
-        st.data_editor(
-            tomorrow_df.reset_index(drop=True),
-            height=dataframe_full_height(tomorrow_df),
-            hide_index=True,
-            disabled=True,
-        )
-
-        st.subheader(f"**Kitchen production - {(local_today() + timedelta(days=1)).isoformat()}**")
-        st.caption("Total quantity per item for tomorrow.")
-        st.data_editor(
-            tomorrow_prod.reset_index(drop=True),
-            height=dataframe_full_height(tomorrow_prod),
-            hide_index=True,
-            disabled=True,
-        )
-
-    st.markdown("**Debug / Raw data (optional)**")
-    with st.expander("Show raw Square JSON for recent pickup orders"):
-        st.text(json.dumps(recent_orders, indent=2)[:20000])  # truncate for safety
+st.markdown("**Debug / Raw data (optional)**")
+with st.expander("Show raw Square JSON for recent pickup orders"):
+    st.text(json.dumps(recent_orders, indent=2)[:20000])  # truncate for safety
