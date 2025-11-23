@@ -10,6 +10,7 @@ import streamlit as st
 
 try:
     from square.client import Client
+    from square.http.auth.o_auth_2 import BearerAuthCredentials
 except ImportError:
     raise ImportError(
         "Could not import Client from square.client. "
@@ -51,7 +52,11 @@ def local_dt_from_rfc3339(ts: str | None) -> datetime | None:
 
 # ----- Square fetch logic -----
 def make_square_client(access_token: str, environment: str) -> Client:
-    return Client(access_token=access_token, environment=environment)
+    # access_token arg is deprecated; use bearer_auth_credentials instead
+    return Client(
+        bearer_auth_credentials=BearerAuthCredentials(access_token),
+        environment=environment,
+    )
 
 
 def fetch_recent_pickup_orders(
