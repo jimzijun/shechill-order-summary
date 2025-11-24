@@ -191,6 +191,7 @@ def orders_to_lineitem_df(orders: list[dict]) -> pd.DataFrame:
                         "Recipient Email": recipient_email,
                         "Recipient Phone": recipient_phone,
                         "Item Name": li.get("name"),
+                        "Variation Name": li.get("variation_name"),
                         "Item Quantity": qty,
                     }
                 )
@@ -201,6 +202,7 @@ def orders_to_lineitem_df(orders: list[dict]) -> pd.DataFrame:
         "Recipient Email",
         "Recipient Phone",
         "Item Name",
+        "Variation Name",
         "Item Quantity",
     ]
 
@@ -212,7 +214,7 @@ def orders_to_lineitem_df(orders: list[dict]) -> pd.DataFrame:
 
     # Sort by fulfillment time for a clean pickup schedule
     df["_fulfillment_time_dt"] = pd.to_datetime(df["Fulfillment Time"], errors="coerce")
-    df = df.sort_values(["_fulfillment_time_dt", "Recipient Name", "Item Name"]).drop(
+    df = df.sort_values(["_fulfillment_time_dt", "Recipient Name", "Item Name", "Variation Name"]).drop(
         columns=["_fulfillment_time_dt"]
     )
 
@@ -224,13 +226,13 @@ def kitchen_production_table(df: pd.DataFrame) -> pd.DataFrame:
     Aggregate total quantity per item for the kitchen production sheet.
     """
     if df.empty:
-        return pd.DataFrame(columns=["Item Name", "Item Quantity"])
+        return pd.DataFrame(columns=["Item Name", "Variation Name", "Item Quantity"])
 
     agg = (
-        df.groupby(["Item Name"], dropna=False)["Item Quantity"]
+        df.groupby(["Item Name", "Variation Name"], dropna=False)["Item Quantity"]
         .sum()
         .reset_index()
-        .sort_values(["Item Name"])
+        .sort_values(["Item Name", "Variation Name"])
     )
     return agg
 
@@ -240,7 +242,7 @@ def dataframe_full_height(df: pd.DataFrame, row_px: int = 35, header_px: int = 3
     Compute a height that fits all rows so Streamlit shows the full table without scroll bars.
     """
     rows = max(len(df), 1)  # ensure at least one row height
-    return header_px + rows * row_px + padding_px
+    return header_px + rows * row_px
 
 
 # ----- Streamlit app -----
