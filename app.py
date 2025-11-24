@@ -120,16 +120,18 @@ def fetch_recent_pickup_orders(
     return all_orders
 
 
-def split_orders_by_pickup_date(orders: list[dict]):
-    """Split recent pickup orders into (today_orders, tomorrow_orders) based on pickup_details.pickup_at."""
-    today = local_today()
-    tomorrow = today + timedelta(days=1)
-
-    today_orders: list[dict] = []
-    tomorrow_orders: list[dict] = []
+def split_orders_by_pickup_date(orders: list[dict], days: int = 7):
+    """
+    Group recent pickup orders by pickup date for the next N days (starting today).
+    Returns a dict keyed by date -> list[orders].
+    """
+    target_days = [local_today() + timedelta(days=i) for i in range(days)]
+    grouped: dict[date, list[dict]] = {d: [] for d in target_days}
 
     for o in orders:
         fulfillments = o.get("fulfillments") or []
+        added_dates: set[date] = set()
+
         for f in fulfillments:
             if f.get("type") != "PICKUP":
                 continue
@@ -137,14 +139,11 @@ def split_orders_by_pickup_date(orders: list[dict]):
             pickup_at = pickup_details.get("pickup_at")
             pickup_date = local_date_from_rfc3339(pickup_at)
 
-            if pickup_date == today:
-                today_orders.append(o)
-                break  # avoid duplicate add if multiple fulfillments
-            elif pickup_date == tomorrow:
-                tomorrow_orders.append(o)
-                break
+            if pickup_date in grouped and pickup_date not in added_dates:
+                grouped[pickup_date].append(o)
+                added_dates.add(pickup_date)
 
-    return today_orders, tomorrow_orders
+    return grouped
 
 
 def orders_to_lineitem_df(orders: list[dict]) -> pd.DataFrame:
@@ -249,31 +248,49 @@ st.set_page_config(page_title="Square Pickup Orders", layout="wide")
 
 st.title("Square Pickup Orders Viewer")
 
-if "day_view" not in st.session_state:
-    st.session_state["day_view"] = "Tomorrow"
+def upcoming_days(days: int = 7) -> list[date]:
+    """Return [today, tomorrow, ...] for the requested day count."""
+    start = local_today()
+    return [start + timedelta(days=i) for i in range(days)]
 
-day_options = ["Today", "Tomorrow"]
+
+def day_label(idx: int, dt: date) -> str:
+    """Human-friendly label for a date starting from today."""
+    if idx == 0:
+        return f"Today ({dt.isoformat()})"
+    if idx == 1:
+        return f"Tomorrow ({dt.isoformat()})"
+    return f"{dt.strftime('%a')} ({dt.isoformat()})"
+
+
+if "day_view" not in st.session_state:
+    st.session_state["day_view"] = None
+
+day_dates = upcoming_days(7)
+day_options = [day_label(i, d) for i, d in enumerate(day_dates)]
+label_to_date = dict(zip(day_options, day_dates))
+
 with st.container():
     st.markdown('<div class="fullwidth-toggle">', unsafe_allow_html=True)
     if hasattr(st, "segmented_control"):
-        selected_day = st.segmented_control(
+        selected_day_label = st.segmented_control(
             "Pickups to view",
             day_options,
-            default=st.session_state["day_view"],
+            default=st.session_state["day_view"] or day_options[1],
             selection_mode="single",
             key="day_view_toggle",
         )
     else:
-        selected_day = st.radio(
+        selected_day_label = st.radio(
             "Pickups to view",
             day_options,
             horizontal=True,
-            index=day_options.index(st.session_state["day_view"]),
+            index=day_options.index(st.session_state["day_view"] or day_options[1]),
             key="day_view_toggle",
         )
     st.markdown("</div>", unsafe_allow_html=True)
 
-st.session_state["day_view"] = selected_day
+st.session_state["day_view"] = selected_day_label
 
 access_token = ACCESS_TOKEN
 location_id = DEFAULT_LOCATION_ID
@@ -290,30 +307,26 @@ if not location_id:
 def load_orders_cached(access_token: str, location_id: str):
     client = make_square_client(access_token, environment="production")
     recent_orders = fetch_recent_pickup_orders(client, location_id, days_back=DAYS_BACK)
-    today_orders, tomorrow_orders = split_orders_by_pickup_date(recent_orders)
-    return recent_orders, today_orders, tomorrow_orders
+    orders_by_day = split_orders_by_pickup_date(recent_orders, days=7)
+    return recent_orders, orders_by_day
 
 
 try:
-    recent_orders, today_orders, tomorrow_orders = load_orders_cached(
+    recent_orders, orders_by_day = load_orders_cached(
         access_token, location_id
     )
 except Exception as e:
     st.error(f"Error fetching orders from Square: {e}")
     st.stop()
 
-today_df = orders_to_lineitem_df(today_orders)
-tomorrow_df = orders_to_lineitem_df(tomorrow_orders)
+orders_by_day = orders_by_day or {}
+selected_date = label_to_date.get(selected_day_label, local_today())
 
-today_prod = kitchen_production_table(today_df)
-tomorrow_prod = kitchen_production_table(tomorrow_df)
-
-selected_date = local_today() if selected_day == "Today" else local_today() + timedelta(days=1)
-selected_df = today_df if selected_day == "Today" else tomorrow_df
-selected_prod = today_prod if selected_day == "Today" else tomorrow_prod
+selected_df = orders_to_lineitem_df(orders_by_day.get(selected_date, []))
+selected_prod = kitchen_production_table(selected_df)
 
 st.subheader(f"**Customer Order - {selected_date.isoformat()}**")
-st.caption(f"One row per line item in each pickup order for {selected_day.lower()}.")
+st.caption(f"One row per line item in each pickup order for {selected_day_label}.")
 st.data_editor(
     selected_df.reset_index(drop=True),
     height=dataframe_full_height(selected_df),
@@ -322,7 +335,7 @@ st.data_editor(
 )
 
 st.subheader(f"**Kitchen production - {selected_date.isoformat()}**")
-st.caption(f"Total quantity per item for {selected_day.lower()}.")
+st.caption(f"Total quantity per item for {selected_day_label}.")
 st.data_editor(
     selected_prod.reset_index(drop=True),
     height=dataframe_full_height(selected_prod),
