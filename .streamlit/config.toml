@@ -1,0 +1,12 @@
+[theme]
+base = "light"
+primaryColor = "#56372E"
+backgroundColor = "#F6E8E2"
+
+# This controls headers (including data editor) if you don't set dataframeHeaderBackgroundColor
+secondaryBackgroundColor = "#F6E8E2"  # or another non‑white color
+
+# Optional: explicit header color just for dataframes/editors
+dataframeHeaderBackgroundColor = "#F6E8E2"
+
+buttonRadius = "none"

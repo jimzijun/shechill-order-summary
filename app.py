@@ -248,7 +248,7 @@ st.set_page_config(page_title="Square Pickup Orders", layout="wide")
 
 st.title("Square Pickup Orders Viewer")
 
-def upcoming_days(days: int = 7) -> list[date]:
+def upcoming_days(days: int = 14) -> list[date]:
     """Return [today, tomorrow, ...] for the requested day count."""
     start = local_today()
     return [start + timedelta(days=i) for i in range(days)]
@@ -266,31 +266,9 @@ def day_label(idx: int, dt: date) -> str:
 if "day_view" not in st.session_state:
     st.session_state["day_view"] = None
 
-day_dates = upcoming_days(7)
-day_options = [day_label(i, d) for i, d in enumerate(day_dates)]
-label_to_date = dict(zip(day_options, day_dates))
-
-with st.container():
-    st.markdown('<div class="fullwidth-toggle">', unsafe_allow_html=True)
-    if hasattr(st, "segmented_control"):
-        selected_day_label = st.segmented_control(
-            "Pickups to view",
-            day_options,
-            default=st.session_state["day_view"] or day_options[1],
-            selection_mode="single",
-            key="day_view_toggle",
-        )
-    else:
-        selected_day_label = st.radio(
-            "Pickups to view",
-            day_options,
-            horizontal=True,
-            index=day_options.index(st.session_state["day_view"] or day_options[1]),
-            key="day_view_toggle",
-        )
-    st.markdown("</div>", unsafe_allow_html=True)
-
-st.session_state["day_view"] = selected_day_label
+day_dates = upcoming_days(14)
+base_day_options = [day_label(i, d) for i, d in enumerate(day_dates)]
+base_label_to_date = dict(zip(base_day_options, day_dates))
 
 access_token = ACCESS_TOKEN
 location_id = DEFAULT_LOCATION_ID
@@ -320,6 +298,32 @@ except Exception as e:
     st.stop()
 
 orders_by_day = orders_by_day or {}
+day_options_empty = {
+    label: orders_to_lineitem_df(orders_by_day.get(day, [])).empty
+    for label, day in base_label_to_date.items()
+}
+
+day_options = [
+    f"{label} 🟢" if not day_options_empty[label] else f"{label} ⭕"
+    for label in base_day_options
+]
+label_to_date = dict(zip(day_options, day_dates))
+
+default_day_option = st.session_state["day_view"]
+if default_day_option not in label_to_date:
+    default_day_option = day_options[1] if len(day_options) > 1 else day_options[0]
+
+with st.container(key="day_view_container"):
+    selected_day_label = st.segmented_control(
+        "Pickup Date",
+        day_options,
+        default=default_day_option,
+        selection_mode="single",
+        key="day_view_toggle",
+    )
+
+
+st.session_state["day_view"] = selected_day_label
 selected_date = label_to_date.get(selected_day_label, local_today())
 
 selected_df = orders_to_lineitem_df(orders_by_day.get(selected_date, []))
